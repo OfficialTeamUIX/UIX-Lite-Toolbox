@@ -42,6 +42,7 @@ bool msgAutoClear = false;
 bool indexed = false;
 bool legacySoftMod = false;
 bool addUDATA = false;
+bool configBackup = false;
 DWORD StatusSetTime = 0;
 DWORD menuNavDelay = 0;
 HANDLE hThread = NULL;
@@ -60,6 +61,7 @@ void DownloadCallback(char* StatusMsg);
 void refreshicons();
 bool isBusy(HANDLE* hThreadPtr);
 void backupDash(bool restore = false);
+void backupConfig(bool restore = false);
 void installFromZipThread();
 int compareVersions(const char* versionA, const char* versionB);
 char* appendNumber(const char* original, int number);
@@ -216,6 +218,9 @@ void action_installUIX() {
 	hThread = socketUtility::downloadFile("TeamUIX.net", "/uix-lite/latest/uix-lite-latest.zip", "HDD0-E:\\TDATA\\fffe0000\\latest.zip", DownloadCallback);
     zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\latest.zip");
     unzipfile = true;
+    bool Exists = false;
+    fileSystem::fileExists("HDD0-C:\\UIX Configs\\config.ini", Exists);
+    if (Exists) { configBackup = true; }
 }
 
 void action_installMSDash() {
@@ -321,12 +326,28 @@ void backupDash(bool restore) {
     }
 }
 
+void backupConfig(bool restore) {
+    if (restore) {
+        bool Exists = false;
+        fileSystem::fileExists("HDD0-C:\\UIX Configs\\config.bak", Exists);
+        if (Exists) {
+            fileSystem::fileDelete("HDD0-C:\\UIX Configs\\config.ini");
+            fileSystem::fileMove("HDD0-C:\\UIX Configs\\config.bak","HDD0-C:\\UIX Configs\\config.ini");
+            configBackup = false;
+        }
+    } else {
+        fileSystem::fileMove("HDD0-C:\\UIX Configs\\config.ini","HDD0-C:\\UIX Configs\\config.bak");
+    }
+}
+
 // Quick implementation of CrunchBite's xunzip library
 void installFromZipThread(){
     if (legacySoftMod) backupDash();
+    if (configBackup) backupConfig();
     bool success = xExtractZip(strdup(zipFile), "HDD0-C:\\", true, true);
     updateStatusMsg(strdup(success ? "Install complete." : "Install failed."),true);
     if (legacySoftMod) backupDash(true);
+    if (configBackup) backupConfig(true);
     zipFile = NULL;
     unzipfile = false;
 }
