@@ -166,12 +166,12 @@ MenuEntry submenu_updateUIX[] = {
     { "Check for Update", action_checkForUpdate, NULL, 0 },
     { "Install Latest Version", action_installUIX, NULL, 0 },
     { "Install Discord Presence", action_installDiscord, NULL, 0 },
-    { "Install MSDash 5960", action_installMSDash, NULL, 0 },
+    { "Restore Original MSDash 5960", action_installMSDash, NULL, 0 },
 };
 
 MenuEntry submenu_manageIcons[] = {
-    { "Refresh Icons.ini", action_refreshIcons, NULL, 0 },
-    { "Add Missing UDATA", action_addMissingUDATA, NULL, 0 },
+    { "Refresh Icons.ini Only", action_refreshIcons, NULL, 0 },
+    { "Refresh Icons.ini & Add Missing UDATA", action_addMissingUDATA, NULL, 0 },
     //{ "Install Audio", action_installAudio, NULL, 0 },
 };
 
@@ -853,6 +853,17 @@ void __cdecl main()
 	}
     
     fileSystem::fileExists("HDD0-C:\\xb0xdash.xbe",legacySoftMod);
+    bool Exists = false;
+    fileSystem::directoryExists("HDD-E:\\TDATA", Exists);
+    if (!Exists) {
+        fileSystem::directoryCreate("HDD-E:\\TDATA");
+        fileSystem::directoryCreate("HDD-E:\\TDATA\\fffe0000");
+    } else {
+        fileSystem::directoryExists("HDD-E:\\TDATA\\fffe0000", Exists);
+        if (!Exists) {
+            fileSystem::directoryCreate("HDD-E:\\TDATA\\fffe0000");
+        }
+    }
 	drawing::loadFont(&font_sfn[0]);
 
 	bitmapFont* fontSmall = drawing::generateBitmapFont("FreeSans", SSFN_STYLE_REGULAR, 18, 18, 0, 256);
