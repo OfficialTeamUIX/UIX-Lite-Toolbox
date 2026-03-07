@@ -369,12 +369,13 @@ extern "C"
 	UCHAR _fastcall KfRaiseIrql(UCHAR NewIrql);
 	VOID _fastcall KfLowerIrql(UCHAR NewIrql);
 
-	NTSTATUS WINAPI MU_CreateDeviceObject(uint32_t port, uint32_t slot, STRING* deviceName);
-	VOID WINAPI MU_CloseDeviceObject(uint32_t port, uint32_t slot);
-	DEVICE_OBJECT* WINAPI MU_GetExistingDeviceObject(uint32_t port, uint32_t slot);
-	BOOL WINAPI XapiFormatFATVolumeEx(STRING* VolumePath, ULONG BytesPerCluster);
+    NTSTATUS WINAPI MU_CreateDeviceObject(uint32_t port, uint32_t slot, STRING* deviceName);
+    VOID WINAPI MU_CloseDeviceObject(uint32_t port, uint32_t slot);
+    DEVICE_OBJECT* WINAPI MU_GetExistingDeviceObject(uint32_t port, uint32_t slot);
+    BOOL WINAPI XapiFormatFATVolumeEx(STRING* VolumePath, ULONG BytesPerCluster);
+    BOOL WINAPI XapiFormatFATVolume(STRING* VolumePath);
 
-	extern LAUNCH_DATA_PAGE* LaunchDataPage;
+    extern LAUNCH_DATA_PAGE* LaunchDataPage;
 
 	VOID WINAPI MmPersistContiguousMemory(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN Persist);
 	PVOID WINAPI MmAllocateContiguousMemory(ULONG NumberOfBytes);

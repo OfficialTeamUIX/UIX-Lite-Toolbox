@@ -58,6 +58,7 @@ int menuDepth = 0;
 void updateStatusMsg(char* msg,bool autoClear);
 void clearStatusMsg();
 void DownloadCallback(char* StatusMsg);
+void ThreadStatusCallback(char* StatusMsg);
 void refreshicons();
 bool isBusy(HANDLE* hThreadPtr);
 void backupDash(bool restore = false);
@@ -129,6 +130,12 @@ void DownloadCallback(void* data) {
     }
 }
 
+void ThreadStatusCallback(void* data) {
+    if (!data) return;
+	char* msg = strdup(reinterpret_cast<char*>(data));
+    updateStatusMsg(msg,true);
+}
+
 bool isBusy(HANDLE* hThreadPtr){
     DWORD exitCode;
     if (hThreadPtr == NULL) return false;
@@ -159,6 +166,7 @@ void action_installStockSkin();
 void action_checkForUpdate();
 void action_refreshIcons();
 void action_addMissingUDATA();
+void action_ClearCache();
 
 void action_exit() { utils::ReturnToDashboard(); }
 
@@ -196,8 +204,13 @@ MenuEntry submenu_manageUIX[] = {
     { "Update UIX Lite", NULL, submenu_updateUIX, sizeof(submenu_updateUIX) / sizeof(MenuEntry) },
 };
 
+MenuEntry submenu_manageXbox[] = {
+    { "Clear Cache", action_ClearCache, NULL, 0 },
+};
+
 MenuEntry mainMenu[] = {
     { "Manage UIX Lite", NULL, submenu_manageUIX, sizeof(submenu_manageUIX)/sizeof(MenuEntry) },
+    { "Manage Xbox", NULL, submenu_manageXbox, sizeof(submenu_manageXbox)/sizeof(MenuEntry) },
     { "Return to Dashboard", action_exit, NULL, 0 }
 };
 
@@ -355,6 +368,44 @@ void installFromZipThread(){
 void installFromZip() {
     updateStatusMsg(strdup("Installing..."),false);
     hThread = CreateThread( NULL, 0, (LPTHREAD_START_ROUTINE)installFromZipThread, 0, 0, NULL);
+}
+
+DWORD WINAPI CacheCleanupThread(LPVOID lpParam) {
+    struct ThreadData
+    {
+	    CallbackFunction callback;
+    }* Params = reinterpret_cast<ThreadData*>(lpParam);
+
+    const char* partitions[] = {
+        "\\Device\\Harddisk0\\Partition3",
+        "\\Device\\Harddisk0\\Partition4",
+        "\\Device\\Harddisk0\\Partition5"
+    };
+
+    for (int i = 0; i < 3; i++) {
+        STRING osPath;
+        osPath.Buffer = (PCHAR)partitions[i];
+        osPath.Length = strlen(partitions[i]);
+        osPath.MaximumLength = osPath.Length + 1;
+        
+        XapiFormatFATVolume(&osPath);
+        Sleep(100);
+    }
+    fileSystem::directoryDelete("HDD0-E:\\cache",true);
+    Params->callback("Cache cleared.");
+    delete Params; 
+    return 0;
+}
+
+void action_ClearCache() {
+    struct ThreadData
+    {
+	    CallbackFunction callback;
+    };
+    ThreadData* Params = new ThreadData;
+    Params->callback = ThreadStatusCallback;
+    updateStatusMsg(strdup("Clearing the cache..."),false);
+    hThread = CreateThread(NULL, 0, CacheCleanupThread, Params, 0, NULL);
 }
 
 int compareVersions(const char* versionA, const char* versionB) {
