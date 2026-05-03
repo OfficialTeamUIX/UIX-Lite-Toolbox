@@ -185,7 +185,7 @@ uint64_t WINAPI audioPlayer::process(void* param)
 			break;
 		}
 
-		directSoundStream->SetVolume(0);
+		directSoundStream->SetVolume(-900);
 
 		for (int i = 0; i < AUDIO_PACKETS; i++)
 		{
