@@ -20,7 +20,7 @@
 
 #include <xgraphics.h>
 #include "xbeParser.h"
-#include "xunzip.h"
+#include "xunzip2.h"
 #include "IniUtility.h"
 
 #define D3DFVF_CUSTOMVERTEX (D3DFVF_XYZ|D3DFVF_TEX1)
@@ -36,6 +36,7 @@ typedef struct MenuEntry {
 char* StatusMsg = NULL;
 char* zipFile = NULL;
 char* UDATA = strdup("HDD0-E:\\UDATA");
+static char g_XbeFileName[MAX_PATH] = { 0 };
 bool unzipfile = false;
 bool chkVersion = false;
 bool msgAutoClear = false;
@@ -59,7 +60,7 @@ void updateStatusMsg(char* msg,bool autoClear);
 void clearStatusMsg();
 void DownloadCallback(char* StatusMsg);
 void ThreadStatusCallback(char* StatusMsg);
-void refreshicons();
+void refreshIcons();
 bool isBusy(HANDLE* hThreadPtr);
 void backupDash(bool restore = false);
 void backupConfig(bool restore = false);
@@ -69,6 +70,7 @@ char* appendNumber(const char* original, int number);
 void enterSubMenu(MenuEntry* subMenu, int size);
 void goBack();
 void installFromZip();
+void GetRunningXbeName();
 
 char* appendNumber(const char* original, int number) {
     // Buffer to hold the integer as a string
@@ -97,7 +99,7 @@ void DownloadCallback(void* data) {
 	updateStatusMsg(msg,autoClear);
     if (strstr(msg,"Download complete.") != NULL) {
         if (unzipfile) {
-            if (strstr(zipFile,"MSDash") != NULL) {
+            if (strstr(zipFile,"RestoreMSDash") != NULL) {
                 fileSystem::directoryDelete("HDD0-C:\\xboxdashdata.185ead00",true);
             }
             installFromZip();
@@ -177,6 +179,11 @@ MenuEntry submenu_updateUIX[] = {
     { "Restore Original MSDash 5960", action_installMSDash, NULL, 0 },
 };
 
+MenuEntry submenu_installUIX[] = {
+    { "Install UIX Lite", action_installUIX, NULL, 0 },
+    { "Install Discord Presence", action_installDiscord, NULL, 0 },
+};
+
 MenuEntry submenu_manageIcons[] = {
     { "Refresh Icons.ini Only", action_refreshIcons, NULL, 0 },
     { "Refresh Icons.ini & Add Missing UDATA", action_addMissingUDATA, NULL, 0 },
@@ -210,7 +217,14 @@ MenuEntry submenu_manageXbox[] = {
 
 MenuEntry mainMenu[] = {
     { "Manage UIX Lite", NULL, submenu_manageUIX, sizeof(submenu_manageUIX)/sizeof(MenuEntry) },
-    { "Manage Xbox", NULL, submenu_manageXbox, sizeof(submenu_manageXbox)/sizeof(MenuEntry) },
+    //{ "Manage Xbox", NULL, submenu_manageXbox, sizeof(submenu_manageXbox)/sizeof(MenuEntry) },
+    { "Clear Cache", action_ClearCache, NULL, 0 },
+    { "Return to Dashboard", action_exit, NULL, 0 }
+};
+
+MenuEntry InstallMenu[] = {
+    { "UIX Lite Installer", NULL, submenu_installUIX, sizeof(submenu_installUIX)/sizeof(MenuEntry) },
+    { "Clear Cache", action_ClearCache, NULL, 0 },
     { "Return to Dashboard", action_exit, NULL, 0 }
 };
 
@@ -227,20 +241,29 @@ void enterSubMenu(MenuEntry* subMenu, int size) {
 
 void action_installUIX() {
     if(isBusy(&hThread)) return;
-    updateStatusMsg(strdup("Downloading UIX Lite..."),false);
-	hThread = socketUtility::downloadFile("TeamUIX.net", "/uix-lite/latest/uix-lite-latest.zip", "HDD0-E:\\TDATA\\fffe0000\\latest.zip", DownloadCallback);
-    zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\latest.zip");
-    unzipfile = true;
     bool Exists = false;
-    fileSystem::fileExists("HDD0-C:\\UIX Configs\\config.ini", Exists);
-    if (Exists) { configBackup = true; }
+    fileSystem::directoryExists("HDD0-C:\\xboxdashdata.185ead00", Exists);
+    if (!Exists) {
+        updateStatusMsg(strdup("Downloading MS Dash..."),false);
+	    hThread = socketUtility::downloadFile("TeamUIX.net", "/uix-lite/MSDash/185ead00.zip", "HDD0-E:\\TDATA\\fffe0000\\FullInstall.zip", DownloadCallback);
+        zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\FullInstall.zip");
+        unzipfile = true;
+    } else {
+        updateStatusMsg(strdup("Downloading UIX Lite..."),false);
+	    hThread = socketUtility::downloadFile("TeamUIX.net", "/uix-lite/latest/uix-lite-latest.zip", "HDD0-E:\\TDATA\\fffe0000\\latest.zip", DownloadCallback);
+        zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\latest.zip");
+        unzipfile = true;
+        bool Exists = false;
+        fileSystem::fileExists("HDD0-C:\\UIX Configs\\config.ini", Exists);
+        if (Exists) { configBackup = true; }
+    }
 }
 
 void action_installMSDash() {
     if(isBusy(&hThread)) return;
-    updateStatusMsg(strdup("Downloading UIX Lite..."),false);
-	hThread = socketUtility::downloadFile("TeamUIX.net", "/uix-lite/MSDash/185ead00.zip", "HDD0-E:\\TDATA\\fffe0000\\MSDash.zip", DownloadCallback);
-    zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\MSDash.zip");
+    updateStatusMsg(strdup("Downloading MS Dash..."),false);
+	hThread = socketUtility::downloadFile("TeamUIX.net", "/uix-lite/MSDash/185ead00.zip", "HDD0-E:\\TDATA\\fffe0000\\RestoreMSDash.zip", DownloadCallback);
+    zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\RestoreMSDash.zip");
     unzipfile = true;
 }
 
@@ -357,12 +380,32 @@ void backupConfig(bool restore) {
 void installFromZipThread(){
     if (legacySoftMod) backupDash();
     if (configBackup) backupConfig();
-    bool success = xExtractZip(strdup(zipFile), "HDD0-C:\\", true, true);
+    bool success = xunzipFromZipFile(zipFile, "HDD0-C:\\", true, true);
+    bool isLatest = (zipFile && strstr(zipFile, "latest") != NULL);
+    bool isFullInstall = (zipFile && strstr(zipFile, "FullInstall") != NULL);
     updateStatusMsg(strdup(success ? "Install complete." : "Install failed."),true);
     if (legacySoftMod) backupDash(true);
     if (configBackup) backupConfig(true);
+    fileSystem::fileDelete(zipFile);
     zipFile = NULL;
     unzipfile = false;
+    if (success) {
+        if (isLatest) {
+            updateStatusMsg(strdup("Indexing the extended partitions..."),false);
+            refreshIcons();
+        } else if (isFullInstall) {
+            updateStatusMsg(strdup("Downloading UIX Lite..."), false);
+            CloseHandle(hThread);
+            zipFile = strdup("HDD0-E:\\TDATA\\fffe0000\\latest.zip");
+            hThread = socketUtility::downloadFile(
+                "TeamUIX.net",
+                "/uix-lite/latest/uix-lite-latest.zip",
+                "HDD0-E:\\TDATA\\fffe0000\\latest.zip",
+                DownloadCallback
+            );
+            unzipfile = true;
+        }
+    }
 }
 
 void installFromZip() {
@@ -905,14 +948,14 @@ void __cdecl main()
     
     fileSystem::fileExists("HDD0-C:\\xb0xdash.xbe",legacySoftMod);
     bool Exists = false;
-    fileSystem::directoryExists("HDD-E:\\TDATA", Exists);
+    fileSystem::directoryExists("HDD0-E:\\TDATA", Exists);
     if (!Exists) {
-        fileSystem::directoryCreate("HDD-E:\\TDATA");
-        fileSystem::directoryCreate("HDD-E:\\TDATA\\fffe0000");
+        fileSystem::directoryCreate("HDD0-E:\\TDATA");
+        fileSystem::directoryCreate("HDD0-E:\\TDATA\\fffe0000");
     } else {
-        fileSystem::directoryExists("HDD-E:\\TDATA\\fffe0000", Exists);
+        fileSystem::directoryExists("HDD0-E:\\TDATA\\fffe0000", Exists);
         if (!Exists) {
-            fileSystem::directoryCreate("HDD-E:\\TDATA\\fffe0000");
+            fileSystem::directoryCreate("HDD0-E:\\TDATA\\fffe0000");
         }
     }
 	drawing::loadFont(&font_sfn[0]);
@@ -932,9 +975,16 @@ void __cdecl main()
 
     audioPlayer::init();
     audioPlayer::play();
+    
+    GetRunningXbeName();
 
-    currentMenu = mainMenu;
-	currentMenuSize = sizeof(mainMenu) / sizeof(MenuEntry);
+    if (strcmp(g_XbeFileName, "Toolbox.xip") == 0) {
+        currentMenu = mainMenu;
+        currentMenuSize = sizeof(mainMenu) / sizeof(MenuEntry);
+    } else {
+        currentMenu = InstallMenu;
+        currentMenuSize = sizeof(InstallMenu) / sizeof(MenuEntry);
+    }
 
     float angle = 0;
     while (TRUE)
@@ -964,4 +1014,34 @@ void __cdecl main()
             angle -= 360.f;
         }
     }
+}
+
+void GetRunningXbeName() {
+    g_XbeFileName[0] = '\0';
+
+    if (XeImageFileName == NULL || XeImageFileName->Buffer == NULL) {
+        return;
+    }
+
+    const char* buffer = XeImageFileName->Buffer;
+    int totalLen = XeImageFileName->Length;
+
+    int start = 0;
+    for (int i = totalLen - 1; i >= 0; --i) {
+        if (buffer[i] == '\\') {
+            start = i + 1;
+            break;
+        }
+    }
+
+    int nameLen = totalLen - start;
+    if (nameLen < 0) {
+        nameLen = 0;
+    }
+    if (nameLen >= (int)sizeof(g_XbeFileName)) {
+        nameLen = sizeof(g_XbeFileName) - 1;
+    }
+
+    memcpy(g_XbeFileName, buffer + start, nameLen);
+    g_XbeFileName[nameLen] = '\0';
 }
