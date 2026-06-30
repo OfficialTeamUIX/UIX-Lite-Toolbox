@@ -71,6 +71,7 @@ void enterSubMenu(MenuEntry* subMenu, int size);
 void goBack();
 void installFromZip();
 void GetRunningXbeName();
+bool patchXonlineDash();
 
 char* appendNumber(const char* original, int number) {
     // Buffer to hold the integer as a string
@@ -357,6 +358,7 @@ void backupDash(bool restore) {
         fileSystem::fileDelete("HDD0-C:\\xb0xdash.xbe");
         fileSystem::fileMove("HDD0-C:\\xboxdash.xbe","HDD0-C:\\xb0xdash.xbe");
         fileSystem::fileMove("HDD0-C:\\xboxdash.bak","HDD0-C:\\xboxdash.xbe");
+        patchXonlineDash();
     } else {
         fileSystem::fileMove("HDD0-C:\\xboxdash.xbe","HDD0-C:\\xboxdash.bak");
     }
@@ -927,6 +929,77 @@ void clearStatusMsg() {
 	}
 }
 
+void GetRunningXbeName() {
+    g_XbeFileName[0] = '\0';
+
+    if (XeImageFileName == NULL || XeImageFileName->Buffer == NULL) {
+        return;
+    }
+
+    const char* buffer = XeImageFileName->Buffer;
+    int totalLen = XeImageFileName->Length;
+
+    int start = 0;
+    for (int i = totalLen - 1; i >= 0; --i) {
+        if (buffer[i] == '\\') {
+            start = i + 1;
+            break;
+        }
+    }
+
+    int nameLen = totalLen - start;
+    if (nameLen < 0) {
+        nameLen = 0;
+    }
+    if (nameLen >= (int)sizeof(g_XbeFileName)) {
+        nameLen = sizeof(g_XbeFileName) - 1;
+    }
+
+    memcpy(g_XbeFileName, buffer + start, nameLen);
+    g_XbeFileName[nameLen] = '\0';
+}
+
+bool patchXonlineDash()
+{
+    //Patch xonlinedash.xbe to point to xb0xdash.xbe if legacy softmod.
+    const char* path = "HDD0-C:\\xodash\\xonlinedash.xbe";
+    const long offsets[] = { 0x3D89, 0x5FB6 };
+    const unsigned char expectedValue = 0x30;
+
+    FILE* file = fopen(path, "r+b");
+    if (file == NULL) {
+        return false;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        if (fseek(file, offsets[i], SEEK_SET) != 0) {
+            fclose(file);
+            return false;
+        }
+
+        int value = fgetc(file);
+        if (value == EOF) {
+            fclose(file);
+            return false;
+        }
+
+        if ((unsigned char)value != expectedValue) {
+            if (fseek(file, offsets[i], SEEK_SET) != 0) {
+                fclose(file);
+                return false;
+            }
+
+            if (fputc(expectedValue, file) == EOF) {
+                fclose(file);
+                return false;
+            }
+        }
+    }
+
+    fclose(file);
+    return true;
+}
+
 void __cdecl main()
 {
 	utils::debugPrint("Welcome to PrometheOS Launcher\n");
@@ -1014,34 +1087,4 @@ void __cdecl main()
             angle -= 360.f;
         }
     }
-}
-
-void GetRunningXbeName() {
-    g_XbeFileName[0] = '\0';
-
-    if (XeImageFileName == NULL || XeImageFileName->Buffer == NULL) {
-        return;
-    }
-
-    const char* buffer = XeImageFileName->Buffer;
-    int totalLen = XeImageFileName->Length;
-
-    int start = 0;
-    for (int i = totalLen - 1; i >= 0; --i) {
-        if (buffer[i] == '\\') {
-            start = i + 1;
-            break;
-        }
-    }
-
-    int nameLen = totalLen - start;
-    if (nameLen < 0) {
-        nameLen = 0;
-    }
-    if (nameLen >= (int)sizeof(g_XbeFileName)) {
-        nameLen = sizeof(g_XbeFileName) - 1;
-    }
-
-    memcpy(g_XbeFileName, buffer + start, nameLen);
-    g_XbeFileName[nameLen] = '\0';
 }
