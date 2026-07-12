@@ -22,6 +22,7 @@
 #include "xbeParser.h"
 #include "xunzip2.h"
 #include "IniUtility.h"
+#include "md5.h"
 
 #define D3DFVF_CUSTOMVERTEX (D3DFVF_XYZ|D3DFVF_TEX1)
 #define MAX_MENU_DEPTH 5
@@ -41,7 +42,7 @@ bool unzipfile = false;
 bool chkVersion = false;
 bool msgAutoClear = false;
 bool indexed = false;
-bool legacySoftMod = false;
+bool isSoftModded = false;
 bool addUDATA = false;
 bool configBackup = false;
 DWORD StatusSetTime = 0;
@@ -72,6 +73,7 @@ void goBack();
 void installFromZip();
 void GetRunningXbeName();
 bool patchXonlineDash();
+bool IsSoftModXboxdash();
 
 char* appendNumber(const char* original, int number) {
     // Buffer to hold the integer as a string
@@ -358,9 +360,12 @@ void backupDash(bool restore) {
         fileSystem::fileDelete("HDD0-C:\\xb0xdash.xbe");
         fileSystem::fileMove("HDD0-C:\\xboxdash.xbe","HDD0-C:\\xb0xdash.xbe");
         fileSystem::fileMove("HDD0-C:\\xboxdash.bak","HDD0-C:\\xboxdash.xbe");
+        fileSystem::fileDelete("HDD0-C:\\xodash\\xbox.xtf");
+        fileSystem::fileMove("HDD0-C:\\xodash\\xbox.bak","HDD0-C:\\xodash\\xbox.xtf");
         patchXonlineDash();
     } else {
         fileSystem::fileMove("HDD0-C:\\xboxdash.xbe","HDD0-C:\\xboxdash.bak");
+        fileSystem::fileMove("HDD0-C:\\xodash\\xbox.xtf","HDD0-C:\\xodash\\xbox.bak");
     }
 }
 
@@ -380,13 +385,13 @@ void backupConfig(bool restore) {
 
 // Quick implementation of CrunchBite's xunzip library
 void installFromZipThread(){
-    if (legacySoftMod) backupDash();
+    if (isSoftModded) backupDash();
     if (configBackup) backupConfig();
     bool success = xunzipFromZipFile(zipFile, "HDD0-C:\\", true, true);
     bool isLatest = (zipFile && strstr(zipFile, "latest") != NULL);
     bool isFullInstall = (zipFile && strstr(zipFile, "FullInstall") != NULL);
     updateStatusMsg(strdup(success ? "Install complete." : "Install failed."),true);
-    if (legacySoftMod) backupDash(true);
+    if (isSoftModded) backupDash(true);
     if (configBackup) backupConfig(true);
     fileSystem::fileDelete(zipFile);
     zipFile = NULL;
@@ -786,6 +791,7 @@ void render_sphere(float angle, utils::dataContainer* sphereMesh)
 void update_scene() {
     if (inputManager::buttonPressed(ButtonA)) {
 		if (GetTickCount() - menuNavDelay < 100) return; else menuNavDelay=GetTickCount();
+        audioPlayer::play(A_Button_Select,sizeof(A_Button_Select));
 		MenuEntry* entry = &currentMenu[mSelectedControl];
         if (entry->subMenu != NULL) {
             enterSubMenu(entry->subMenu, entry->subMenuSize);
@@ -798,6 +804,7 @@ void update_scene() {
     if (inputManager::buttonPressed(ButtonB)) {
 		if (GetTickCount() - menuNavDelay < 100) return; else menuNavDelay=GetTickCount();
         if (menuDepth > 0) {
+            audioPlayer::play(B_Button_Back,sizeof(B_Button_Back));
 			menuDepth--;
 			currentMenu = menuStack[menuDepth];
 			currentMenuSize = menuSizeStack[menuDepth];
@@ -807,11 +814,13 @@ void update_scene() {
 
     if (inputManager::buttonPressed(ButtonDpadDown)) {
         if (GetTickCount() - menuNavDelay < 100) return; else menuNavDelay=GetTickCount();
+        audioPlayer::play(MainMenu_Down,sizeof(MainMenu_Down));
         mSelectedControl = (mSelectedControl + 1) % currentMenuSize;
     }
 
     if (inputManager::buttonPressed(ButtonDpadUp)) {
         if (GetTickCount() - menuNavDelay < 100) return; else menuNavDelay=GetTickCount();
+        audioPlayer::play(MainMenu_Up,sizeof(MainMenu_Up));
         mSelectedControl = (mSelectedControl - 1 + currentMenuSize) % currentMenuSize;
     }
 
@@ -959,6 +968,16 @@ void GetRunningXbeName() {
     g_XbeFileName[nameLen] = '\0';
 }
 
+bool IsSoftModXboxdash()
+{
+    char md5[33];
+    if (!GetFileMd5("HDD0-C:\\xboxdash.xbe", md5)) {
+        return false;
+    }
+
+    return strcmp(md5, "8da4d816604e9b9d5aa69d1fd395a48e") == 0;
+}
+
 bool patchXonlineDash()
 {
     //Patch xonlinedash.xbe to point to xb0xdash.xbe if legacy softmod.
@@ -1019,7 +1038,8 @@ void __cdecl main()
 		network::init();
 	}
     
-    fileSystem::fileExists("HDD0-C:\\xb0xdash.xbe",legacySoftMod);
+    isSoftModded = IsSoftModXboxdash();
+
     bool Exists = false;
     fileSystem::directoryExists("HDD0-E:\\TDATA", Exists);
     if (!Exists) {
@@ -1047,7 +1067,7 @@ void __cdecl main()
     drawing::loadImage((char*)base_jpg, sizeof(base_jpg), "base");
 
     audioPlayer::init();
-    audioPlayer::play();
+    audioPlayer::play(engine_room_ogg,sizeof(engine_room_ogg),true);
     
     GetRunningXbeName();
 

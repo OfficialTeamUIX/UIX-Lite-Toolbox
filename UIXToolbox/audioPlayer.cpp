@@ -62,25 +62,33 @@ bool audioPlayer::close()
 	return true;
 }
 
-uint32_t audioPlayer::play()
+uint32_t audioPlayer::play(const uint8_t* musicData, uint32_t musicDataSize, bool repeat)
 {
-	if (mPause == true || mAudioContainerMap->count() >= 20)
-	{
-		return 0;
-	}
-	
+    if (mPause == true || mAudioContainerMap->count() >= 20)
+    {
+        return 0;
+    }
 
-	mUniqueSoundId++;
+    if (musicData == NULL || musicDataSize == 0)
+    {
+        return 0;
+    }
 
-	audioContainer* sound = new audioContainer();
-	sound->id = mUniqueSoundId;
-	sound->requestStop = false;
-	sound->thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)process, (void*)sound, 0, NULL);
-	mAudioContainerMap->add(mUniqueSoundId, sound);
+    mUniqueSoundId++;
 
-	utils::debugPrint("Sound %i play start with thread handle %i\n", mUniqueSoundId, sound->thread);
+    audioContainer* sound = new audioContainer();
+    sound->id = mUniqueSoundId;
+    sound->memory = musicData;
+    sound->memorySize = musicDataSize;
+    sound->repeat = repeat;
+    sound->requestStop = false;
+    sound->thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)process, (void*)sound, 0, NULL);
 
-	return mUniqueSoundId;
+    mAudioContainerMap->add(mUniqueSoundId, sound);
+
+    utils::debugPrint("Sound %i play start with thread handle %i\n", mUniqueSoundId, sound->thread);
+
+    return mUniqueSoundId;
 }
 
 bool audioPlayer::stop(uint32_t key)
@@ -105,10 +113,10 @@ void audioPlayer::pause(bool value)
 uint64_t WINAPI audioPlayer::process(void* param)
 {
 	audioContainer* container = (audioContainer*)param;
-	bool repeat = true;
+	bool repeat = container->repeat;
 
 	int error;
-	stb_vorbis *vorbis = stb_vorbis_open_memory(engine_room_ogg, sizeof(engine_room_ogg), &error, NULL);
+	stb_vorbis *vorbis = stb_vorbis_open_memory(container->memory, container->memorySize, &error, NULL);
 	if (vorbis == NULL)
 	{
 		return 0;
@@ -185,7 +193,9 @@ uint64_t WINAPI audioPlayer::process(void* param)
 			break;
 		}
 
-		directSoundStream->SetVolume(-900);
+		float percent = 0.8f;//repeat ? 0.85f : 1.0f;
+		int volume = (int)(DSBVOLUME_HW_MIN * (1.0f - min(max(percent, 0.0f), 1.0f)));
+		directSoundStream->SetVolume(volume);
 
 		for (int i = 0; i < AUDIO_PACKETS; i++)
 		{
